@@ -1,0 +1,250 @@
+{
+  "name": "Capstone 2 Summarize email",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=\n\nYou are my email assistant. You will receive emails from the last 3 days, each with sender, date, subject, and body.\n{{ $json.snippet }}{{ $json.From }}{{ $json.Subject }}\n\nYour job: read all of them and turn them into a clear action list.\n\nFor each email that needs something from me, extract:\n- Action: what I need to do (start with a verb)\n- From: who sent it\n- Deadline: date/time if mentioned, otherwise \"Not specified\"\n- Priority: High / Medium / Low\n  - High = deadline within 48 hours, a request from a client/manager, payment, money transfer, property/legal transaction, or anything urgent\n  - Medium = needs a reply or task this week\n  - Low = nice to do, no deadline\n\nRules:\n- Ignore newsletters, promotions, automated notifications, receipts, and OTPs unless they need an action (e.g., payment due, renewal, security alert).\n- ALWAYS treat emails about money, property, loans, taxes (TDS), sale/purchase, MoUs, or legal/financial transactions as action items, even if the sender only says \"for your reference\" or \"FYI\". The implied action is to review the figures, confirm or raise discrepancies, and complete any pending payment or receipt. Include key amounts in the action when short enough.\n- Emails from Brigade Group or mentioning the plot sale, sale consideration, balance payable, or TDS are always High priority.\n- Treat any meeting invite from Siddharth Rajsekar that reads like a sales pitch or promotion as promotional: do not list it as an action. Put it under \"Promotional\" instead.\n- If several emails are about the same thing, merge them into one action.\n- Do not invent details. If something is unclear, write \"Unclear\" instead of guessing.\n- Keep each action under 20 words (amounts may push slightly over for financial items).\n- Any messages with subject \"You have done a UPI txn. Check details!\" will have an information like below \" Rs.20.00 is debited from your account ending 1477 towards VPA *********70lt@pty (PEARL FANCY STORE) on 08-11-26.\" add amount by each day and list it on a seprate category named \"Today's expenses\", do not add them to below listed priority\n\n\nOutput format:\n\n## 🔴 High Priority\n1. [Action] | From: [sender] | Deadline: [date]\n\n## 🟡 Medium Priority\n1. ...\n\n## 🟢 Low Priority\n1. ...\n\n## 📬 FYI (no action needed)\n- One line each, max 5 items\n\n## 📢 Promotional\n- One line each (sender + subject only)\n\n## Summary\n2-3 sentences on what the 3 days looked like overall.\n\nIf there are no actions, say \"No action items found.\"",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        560,
+        -512
+      ],
+      "id": "66c18373-4d38-4195-b80f-9af6b3a2b940",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        368,
+        -240
+      ],
+      "id": "f21d6514-4b96-4e04-9381-2b452f7e0a34",
+      "name": "Google Gemini Chat Model",
+      "notesInFlow": false,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "1scjs4AWpHxW9dzF",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "pavas.malviya@gmail.com",
+        "subject": "Summary of Emails (3 days)",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        928,
+        -272
+      ],
+      "id": "6e345255-a403-4816-ba97-5172e1900019",
+      "name": "Send a message",
+      "webhookId": "fcad59ac-7ad4-45cc-ae00-c8a298e6adf3",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J3zvE0tQ90tkmJVM",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "filters": {
+          "q": "newer_than:3d"
+        }
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        160,
+        -512
+      ],
+      "id": "160f432f-e623-4dde-b0cb-8b7b34c7ac8f",
+      "name": "Get many messages",
+      "webhookId": "0eab40ae-5e50-4423-b50a-c767a607dde8",
+      "alwaysOutputData": true,
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J3zvE0tQ90tkmJVM",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldsToAggregate": {
+          "fieldToAggregate": [
+            {
+              "fieldToAggregate": "snippet"
+            },
+            {
+              "fieldToAggregate": "From"
+            },
+            {
+              "fieldToAggregate": "Subject"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        368,
+        -512
+      ],
+      "id": "dfc7a71a-7248-49f6-babc-6ba311722672",
+      "name": "Aggregate"
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json.output || $input.first().json.text || '';\nconst md = raw.replace(/\\\\n/g, '\\n'); // handles literal \"\\n\" text too\n\nconst esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');\n\nlet html = '';\nlet inList = false;\nconst closeList = () => { if (inList) { html += '</ul>'; inList = false; } };\n\nfor (let line of md.split('\\n')) {\n  line = line.trim();\n  if (!line) { closeList(); continue; }\n\n  const t = esc(line).replace(/\\*\\*(.+?)\\*\\*/g, '<b>$1</b>');\n\n  if (t.startsWith('## ')) {\n    closeList();\n    html += `<h3 style=\"margin:18px 0 8px;color:#1a1a1a;\">${t.slice(3)}</h3>`;\n  } else if (/^([-*]|\\d+\\.)\\s/.test(t)) {\n    if (!inList) { html += '<ul style=\"margin:0 0 12px;padding-left:20px;\">'; inList = true; }\n    html += `<li style=\"margin-bottom:6px;\">${t.replace(/^([-*]|\\d+\\.)\\s/, '')}</li>`;\n  } else {\n    closeList();\n    html += `<p style=\"margin:0 0 12px;line-height:1.5;\">${t}</p>`;\n  }\n}\ncloseList();\n\nconst body = `<div style=\"font-family:Arial,sans-serif;font-size:14px;color:#333;max-width:600px;\">${html}</div>`;\n\nreturn [{ json: { html: body, subject: `Email Action Summary - ${$now.toFormat('dd LLL yyyy')}` } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        928,
+        -512
+      ],
+      "id": "69ff67e3-a7ff-4ddc-9c41-6ca32483b114",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -352,
+        -512
+      ],
+      "id": "4b2b0578-ebf4-437e-aca4-25b61f2e8f43",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {}
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -160,
+        -336
+      ],
+      "id": "588ba152-8ddf-44a3-8c9d-dadaee732ab5",
+      "name": "Schedule Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get many messages": {
+      "main": [
+        [
+          {
+            "node": "Aggregate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Get many messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get many messages",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "b4448823-c367-42c7-8b93-ad1a358b6e11",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "761a794c4da9235c62857060be516bfe9d943f5f50584dbb00d0a1d608993847"
+  },
+  "nodeGroups": [],
+  "id": "iEgPMwgReGjEAmVb",
+  "tags": []
+}
