@@ -1,0 +1,228 @@
+{
+  "name": "Capstone 2 Parent  Agent",
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -1008,
+        -176
+      ],
+      "id": "7fa260ee-d437-4945-9a3c-2172184b8d00",
+      "name": "When chat message received",
+      "webhookId": "9dd30a3a-bb0a-4e6c-8028-c758dd9c072a"
+    },
+    {
+      "parameters": {
+        "options": {
+          "systemMessage": "=You are the office assistant and your main objective is to Generate meeting summary, book meetings and give a summary of last 3 days emails\n\nYOUR JOB IS TO:\nExtract the task which could be executed a\n\nRULES:\nExtract what does user want to perform and call following tools:\nCapstone 2 Summarize email\nCapstone 2 Meeting Notes\nCapstone2_CalendarMate\n\nIn case user ask you to share any other information do not process that and share a respectful response\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        -704,
+        -272
+      ],
+      "id": "a5c8aab4-6a4d-4dc1-83b9-1420487df46e",
+      "name": "Get User Input"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.5-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -864,
+        -16
+      ],
+      "id": "82a931e7-00eb-43c2-8ae4-3cd35151f009",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "1scjs4AWpHxW9dzF",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "iEgPMwgReGjEAmVb",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/iEgPMwgReGjEAmVb",
+          "cachedResultName": "Capstone 2 Summarize email"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -352,
+        -16
+      ],
+      "id": "4d985bf3-3c36-4765-97b4-c18fb77856a1",
+      "name": "Call 'Capstone 2 Summarize email'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "ZCtYJfoGSWJX3L8q",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/ZCtYJfoGSWJX3L8q",
+          "cachedResultName": "Capstone 2 Meeting Notes"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -128,
+        -16
+      ],
+      "id": "dcced20d-f779-4f95-a7a7-5cfe7fda36d8",
+      "name": "Call 'Capstone 2 Meeting Notes'"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "jwylLIvRCAEziN6d",
+          "mode": "list",
+          "cachedResultUrl": "/workflow/jwylLIvRCAEziN6d",
+          "cachedResultName": "Capstone2_CalendarMate"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolWorkflow",
+      "typeVersion": 2.2,
+      "position": [
+        -592,
+        0
+      ],
+      "id": "a55ec44b-3715-4294-aff3-054243318052",
+      "name": "Call 'Capstone2_CalendarMate'"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1056,
+        208
+      ],
+      "id": "e08288b9-8f44-457f-baf7-c17f017621f5",
+      "name": "Error Trigger"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When chat message received": {
+      "main": [
+        [
+          {
+            "node": "Get User Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get User Input": {
+      "main": [
+        []
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Get User Input",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Capstone 2 Summarize email'": {
+      "ai_tool": [
+        [
+          {
+            "node": "Get User Input",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Capstone 2 Meeting Notes'": {
+      "ai_tool": [
+        [
+          {
+            "node": "Get User Input",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call 'Capstone2_CalendarMate'": {
+      "ai_tool": [
+        [
+          {
+            "node": "Get User Input",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "9c7c7afb-1d9f-4481-aa24-e481a6a5cf85",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "761a794c4da9235c62857060be516bfe9d943f5f50584dbb00d0a1d608993847"
+  },
+  "nodeGroups": [],
+  "id": "bvlJTboToCWD7aEB",
+  "tags": []
+}
