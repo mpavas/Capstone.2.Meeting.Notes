@@ -1,0 +1,252 @@
+{
+  "name": "Capstone 2 Meeting Notes",
+  "nodes": [
+    {
+      "parameters": {
+        "resource": "fileFolder",
+        "queryString": "*.txt",
+        "returnAll": true,
+        "filter": {
+          "folderId": {
+            "__rl": true,
+            "value": "1kcE-vuBaHPlcaacWLokUo4unkU5JqHM5",
+            "mode": "list",
+            "cachedResultName": "Capstone2 MeetingNotes",
+            "cachedResultUrl": "https://drive.google.com/drive/folders/1kcE-vuBaHPlcaacWLokUo4unkU5JqHM5"
+          }
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -64,
+        -192
+      ],
+      "id": "955a91d6-b2e3-4eb5-8122-993279f187ec",
+      "name": "Search files and folders1",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "oMNovPvU9IT7E2lD",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json.id }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        160,
+        -192
+      ],
+      "id": "f5ea9569-3de8-4d1b-8924-15f62431fc9f",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "oMNovPvU9IT7E2lD",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "text",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        384,
+        -192
+      ],
+      "id": "c5a0fa1b-1e2a-427d-897d-622ac4aa1394",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=You are an expert executive assistant.\n\nAnalyze the meeting notes, transcript, or document and create a structured summary.\n{{ $json.data }}\nIMPORTANT:\n1. Identify and capture the source file name.\n2. Extract the meeting title from the file name if possible.\n3. Extract the meeting date from the file name if possible.\n4. If the file name follows a pattern such as:\n   - 2026-10-15_ProjectReview.docx\n   - Project Review_15-Oct-2026.txt\n   - 20261015 Customer Sync.md\n   then parse and report the date and meeting name.\n5. If the date or meeting name cannot be determined from the filename, state \"Not identified\".\n\nOutput in the following Structured JSON:\n\n{\n  \"meetingName\": \"Sprint 24 Planning\",\n  \"meetingDate\": \"2026-10-21\",\n  \"sourceFile\": \"2026-10-21_Sprint24Planning.docx\",\n  \"executiveSummary\": [\n    \"Point 1\",\n    \"Point 2\"\n  ],\n  \"actionItems\": [\n    {\n      \"owner\": \"Anita\",\n      \"task\": \"Create sprint board\",\n      \"dueDate\": \"2026-10-21\"\n    }\n  ]\n}\n\nAdditional Instructions:\n- Do not invent information.\n- Clearly distinguish facts from assumptions.\n- Extract all commitments, deadlines, owners, and dependencies.\n- Highlight urgent items.\n- Preserve terminology used in the meeting.\n\nMeeting File Name:\n[FILENAME]\n\nMeeting Notes / Transcript:\n[CONTENT]",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        608,
+        -192
+      ],
+      "id": "629775d0-679e-4ea8-912f-85797f3539c5",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash-lite",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        528,
+        64
+      ],
+      "id": "c31ac781-bc56-4387-ad85-5c6efc791b9d",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "1scjs4AWpHxW9dzF",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// Extract JSON from markdown code blocks\nconst meetings = items.map(item => {\n  let txt = item.json.output || \"\";\n\n  txt = txt\n    .replace(/```json/g, \"\")\n    .replace(/```/g, \"\")\n    .trim();\n\n  return JSON.parse(txt);\n});\n\n// Collect all actions\nconst allActions = [];\nmeetings.forEach(meeting => {\n  (meeting.actionItems || []).forEach(action => {\n    allActions.push({\n      meetingName: meeting.meetingName,\n      meetingDate: meeting.meetingDate,\n      sourceFile: meeting.sourceFile,\n      owner: action.owner,\n      task: action.task,\n      dueDate: action.dueDate\n    });\n  });\n});\n\nlet html = `\n<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"UTF-8\">\n<style>\nbody{\n    font-family:Arial,Helvetica,sans-serif;\n    color:#333;\n    background:#f5f7fa;\n    margin:0;\n    padding:20px;\n}\n.container{\n    max-width:1200px;\n    margin:auto;\n}\n.header{\n    background:#1f4e79;\n    color:white;\n    padding:20px;\n    border-radius:8px;\n}\n.card{\n    background:white;\n    margin-top:20px;\n    border-radius:8px;\n    padding:20px;\n    box-shadow:0 1px 4px rgba(0,0,0,0.15);\n}\ntable{\n    border-collapse:collapse;\n    width:100%;\n}\nth{\n    background:#1f4e79;\n    color:white;\n    padding:10px;\n    text-align:left;\n}\ntd{\n    border:1px solid #ddd;\n    padding:8px;\n    vertical-align:top;\n}\nul{\n    margin:0;\n    padding-left:20px;\n}\n.summary{\n    background:#eef4fb;\n    padding:12px;\n    border-left:4px solid #1f4e79;\n    margin-top:8px;\n}\n.badge{\n    background:#e8f0fe;\n    padding:4px 8px;\n    border-radius:4px;\n    font-size:12px;\n}\n</style>\n</head>\n<body>\n<div class=\"container\">\n\n<div class=\"header\">\n<h1>📋 Meeting Action Digest</h1>\n<p>Generated by n8n</p>\n</div>\n\n<div class=\"card\">\n<h2>🔥 Consolidated Action Tracker</h2>\n\n<table>\n<tr>\n<th>Date</th>\n<th>Meeting</th>\n<th>Owner</th>\n<th>Action</th>\n<th>Due Date</th>\n<th>Source File</th>\n</tr>\n`;\n\nallActions.forEach(action => {\n  html += `\n  <tr>\n    <td>${action.meetingDate || \"-\"}</td>\n    <td>${action.meetingName || \"-\"}</td>\n    <td>${action.owner || \"-\"}</td>\n    <td>${action.task || \"-\"}</td>\n    <td>${action.dueDate || \"-\"}</td>\n    <td>${action.sourceFile || \"-\"}</td>\n  </tr>\n  `;\n});\n\nhtml += `\n</table>\n</div>\n`;\n\nmeetings.forEach(meeting => {\n\n  html += `\n  <div class=\"card\">\n\n  <h2>${meeting.meetingName}</h2>\n\n  <p>\n    <span class=\"badge\">📅 ${meeting.meetingDate || 'N/A'}</span>\n    &nbsp;\n    <span class=\"badge\">📁 ${meeting.sourceFile || 'N/A'}</span>\n  </p>\n\n  <h3>Executive Summary</h3>\n  <div class=\"summary\">\n  <ul>\n  `;\n\n  (meeting.executiveSummary || []).forEach(item => {\n      html += `<li>${item}</li>`;\n  });\n\n  html += `\n  </ul>\n  </div>\n\n  <h3>Action Items</h3>\n\n  <table>\n  <tr>\n    <th>Owner</th>\n    <th>Task</th>\n    <th>Due Date</th>\n  </tr>\n  `;\n\n  (meeting.actionItems || []).forEach(action => {\n      html += `\n      <tr>\n        <td>${action.owner}</td>\n        <td>${action.task}</td>\n        <td>${action.dueDate}</td>\n      </tr>\n      `;\n  });\n\n  html += `\n  </table>\n\n  </div>\n  `;\n});\n\nhtml += `\n</div>\n</body>\n</html>\n`;\n\nreturn [{\n  json: {\n    html\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        976,
+        -192
+      ],
+      "id": "d2d3eb84-3f86-460e-ab6f-0c48b251f885",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "sendTo": "pavas.malviya@gmail.com",
+        "subject": "Meeting Summary",
+        "message": "={{ $json.html }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        -192
+      ],
+      "id": "25ff2a77-4979-43ac-9972-260fcae3df0e",
+      "name": "Send a message",
+      "webhookId": "1f5f3c94-5285-4cc7-a809-9166a86dcc5e",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "J3zvE0tQ90tkmJVM",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -320,
+        -192
+      ],
+      "id": "0687998a-57ee-4ea3-ae37-423114ba4e5a",
+      "name": "When Executed by Another Workflow"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Search files and folders1": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Search files and folders1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "7c2c6fe1-4a38-45a6-8f8f-890bfc8d9ac6",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "761a794c4da9235c62857060be516bfe9d943f5f50584dbb00d0a1d608993847"
+  },
+  "nodeGroups": [],
+  "id": "ZCtYJfoGSWJX3L8q",
+  "tags": []
+}
