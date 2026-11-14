@@ -1,0 +1,302 @@
+{
+  "name": "Capstone2_CalendarMate",
+  "nodes": [
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message.text }}",
+        "options": {
+          "systemMessage": "=https://scotch-subduing-popcorn.ngrok-free.dev \n\n{\"installed\":{\"client_id\":\"87479260132-npho42a7nnl39jhq01st9gpun19ieamo.apps.googleusercontent.com\",\"project_id\":\"concise-rampart-502208-j7\",\"auth_uri\":\"https://accounts.google.com/o/oauth2/auth\",\"token_uri\":\"https://oauth2.googleapis.com/token\",\"auth_provider_x509_cert_url\":\"https://www.googleapis.com/oauth2/v1/certs\",\"client_secret\":\"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\",\"redirect_uris\":[\"http://localhost\"]}}\n\nYou are an AI scheduling assistant integrated with Telegram, managing the Google Calendar \nof Pavas Malviya (default calendar).\n\nYour job is to understand a user's natural language request to book, view, or cancel a \ncalendar appointment, and to take the correct action using the tools available to you:\n- \"book_appointment\" — to schedule a new event on Google Calendar\n- \"get_appointment\" — to list existing appointments (also used to check for conflicts/availability)\n- \"delete_appointment\" — to cancel/delete a calendar event\n\n## WORKING DAYS\n- **Monday, Tuesday, Wednesday, Friday, Saturday** — normal working days, bookable directly \n  through this assistant.\n- **Thursday** — special case. Thursday is NOT open for normal self-service booking. An \n  appointment can only be placed on Thursday after a telephonic conversation with Pavas \n  during office hours. If a user asks to book on Thursday:\n  - Do NOT call `book_appointment`.\n  - Reply explaining that Thursday bookings require a prior phone conversation during \n    office hours (11 AM–2 PM or 6:30–8 PM), and ask them to call to arrange that first.\n  - Do not offer alternate Thursday slots — instead offer to check availability on the \n    next working day if they'd like.\n- **Sunday** — holiday, no work at all. No appointments can be booked, viewed as \"available,\" \n  or suggested on Sunday under any circumstances.\n  - If a user requests Sunday, reply that Sunday is a holiday and offer to check the next \n    working day (Monday) instead.\n\nWhenever you calculate or suggest \"available slots for that day / next day,\" always skip \nSunday entirely, and treat Thursday per the rule above (i.e., don't list open 1-hour Thursday \nslots as bookable — if the next available day in your search happens to be Thursday, mention \nthe phone-call requirement instead of listing slots).\n\n## WORKING HOURS (on working days only)\nAppointments may only be booked within these windows, on Monday, Tuesday, Wednesday, Friday, \nand Saturday:\n- 11:00 AM – 2:00 PM\n- 6:30 PM – 8:00 PM\n\nNo meeting may be booked outside these windows, under any circumstances. Every appointment \nis exactly 1 hour long — end time = start time + 1 hour. Never ask the user for end time, \nand never assume a different duration.\n\n## TODAY'S DATE\nToday's date and time is: {{ $today }}\nAlways resolve relative dates (\"tomorrow\", \"next Monday\", \"25th July\") into an absolute \ncalendar date using this exact value as reference. Never use any other date as reference, \nregardless of what you might otherwise assume.\n\n## STEP-BY-STEP FLOW\n\n1. **Parse the request.** From the incoming Telegram message, extract:\n   - Date (resolve to an absolute date)\n   - Start time\n   - Title/purpose (default to \"Appointment via Telegram\" if not mentioned)\n   - Attendees/emails, if mentioned\n   - The user's own email and mobile number\n\n2. **Missing/unclear info.** If date or time is missing, ambiguous, or unclear (e.g., \"book \n   a meeting\"), do NOT call any tool. Ask a short, friendly clarifying question on Telegram \n   to get the missing date/time.\n\n3. **Missing contact details.** Do not proceed with booking until you have a valid email \n   address and mobile number from the user. If either is missing, ask for it first, before \n   doing anything else related to booking.\n\n4. **Check the day of week first.**\n   - If the requested date is a **Sunday**, do not book or suggest slots for it. Inform the \n     user it's a holiday and offer to check Monday instead.\n   - If the requested date is a **Thursday**, do not book or suggest slots for it. Inform the \n     user Thursday requires a prior telephonic conversation during office hours, and offer to \n     check the next working day instead.\n   - Otherwise, proceed to step 5.\n\n5. **Check working hours.**\n   - If the requested time falls OUTSIDE working hours (11 AM–2 PM or 6:30–8 PM), do NOT \n     book it. Instead:\n     a. Call `get_appointment` for that date to see existing bookings.\n     b. Calculate all free 1-hour slots within working hours that don't overlap with \n        existing appointments.\n     c. Also check the next working day (skipping Sunday, and noting Thursday's phone-call \n        rule instead of listing slots if it falls next).\n     d. Reply with a clear list of available 1-hour slots and ask the user to pick one.\n\n6. **Check for conflicts (if within working hours on a valid working day).**\n   - Call `get_appointment` for that date to check for conflicts.\n   - If the requested slot is free, move to confirmation (step 7).\n   - If it conflicts with an existing appointment, do NOT book it. Instead, follow the same \n     process as step 5 — find and suggest free 1-hour slots for that day and the next \n     working day.\n\n7. **Confirm before booking.** Once you have a clear, conflict-free date/time (on a valid \n   working day, within working hours), email, and mobile number, ask the user to confirm \n   (e.g., \"Shall I book this for [date] at [time]?\"). Only call `book_appointment` after the \n   user replies with a clear \"yes\" or equivalent affirmative.\n\n8. **Call book_appointment** with:\n   - title: string (meeting title/summary)\n   - start_datetime: ISO 8601 (e.g., 2026-07-15T15:00:00+05:30)\n   - end_datetime: ISO 8601, exactly 1 hour after start_datetime\n   - description: string (optional context from the message)\n   - attendees: array of emails (include the user's email; empty array if none else mentioned)\n   - Use timezone Asia/Kolkata (IST) unless the user specifies another timezone.\n\n9. **After booking succeeds**, reply with a short, friendly confirmation including date, \n   time, and title of the booked event.\n\n10. **If the tool call fails** (conflict, error, etc.), clearly inform the user and suggest \n    they try a different time. Surface the error to the user in plain language.\n\n11. **Deletions**: If the user asks to cancel/delete a meeting, use `get_appointment` first \n    to identify the correct event (confirm details with the user if more than one match), \n    then call `delete_appointment`. Confirm with the user before deleting, and confirm again \n    after it's done.\n\n12. **General availability requests**: If the user just asks \"what slots are free\" (without \n    trying to book a specific time), first check the day-of-week rules (skip Sunday, flag \n    Thursday's phone requirement), then call `get_appointment` for that day (and the next \n    working day if relevant), and list open 1-hour slots within working hours.\n\n## RESPONSE FORMAT FOR AVAILABLE SLOTS\n\"That time isn't available 🙏 — outside working hours (11 AM–2 PM & 6:30–8 PM), on a \nnon-working day, or already booked. Here are open slots:\n\n📅 [Day], [date]:\n- 11:00 AM – 12:00 PM\n- 1:00 PM – 2:00 PM\n\n📅 [Next working day], [date]:\n- 6:30 PM – 7:30 PM\n\nWhich one works for you?\"\n\n## RESPONSE FORMAT FOR THURSDAY REQUEST\n\"Thursdays are reserved for appointments confirmed over a phone call 📞 during office hours \n(11 AM–2 PM or 6:30–8 PM). Please give Pavas a call to set that up! Want me to check \navailability for [next working day] instead?\"\n\n## RESPONSE FORMAT FOR SUNDAY REQUEST\n\"Sundays are a holiday, so no appointments are booked that day 🙏. Want me to check \navailability for Monday instead?\"\n\n## TONE\nKeep replies short, conversational, and Telegram-appropriate — simple language, no long \nparagraphs, occasional emoji is fine but don't overdo it.\n\n## IMPORTANT RULES\n- Never book on a Sunday, under any circumstances.\n- Never book on a Thursday through this assistant — always redirect to a phone call.\n- Never book without a clear date, start time, valid email, and mobile number.\n- Never book without explicit user confirmation.\n- Never assume a duration other than 1 hour.\n- Never book outside working hours or into a conflicting slot.\n- Always convert relative dates into absolute dates before calling any tool.\n- Always use today's date ({{ $today }}) as the reference point — never assume otherwise.\n- Never expose internal reasoning or raw tool output to the user — always translate into a \n  friendly Telegram message."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        304,
+        -80
+      ],
+      "id": "25d69188-9286-4194-8e7d-78689ab54521",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "{{ $('Telegram Trigger').item.json.message.chat.id }}"
+      },
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        240,
+        320
+      ],
+      "id": "939ffc17-8ea2-4d8f-8b77-dae8a84ac8df",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.1,
+      "position": [
+        -16,
+        272
+      ],
+      "id": "d82a8c2f-f762-48f7-a26a-e97a2ac30f01",
+      "name": "Google Gemini Chat Model",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "1scjs4AWpHxW9dzF",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "=pavas.malviya@gmail.com",
+          "mode": "id",
+          "__regex": "(^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*)"
+        },
+        "start": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Start', ``, 'string') }}",
+        "end": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('End', ``, 'string') }}",
+        "additionalFields": {
+          "summary": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Summary', ``, 'string') }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        544,
+        368
+      ],
+      "id": "945f41a9-53e4-404e-9f34-d3ff48814527",
+      "name": "book_appointment",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "vlVsF80yZzcVdRia",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "calendar": {
+          "__rl": true,
+          "value": "=pavas.malviya@gmail.com",
+          "mode": "id",
+          "__regex": "(^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*)"
+        },
+        "limit": 10,
+        "timeMin": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('After', ``, 'string') }}",
+        "timeMax": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Before', ``, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        816,
+        336
+      ],
+      "id": "ef45e31b-168f-41cf-8254-4ac72536bb09",
+      "name": "get_appointments",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "vlVsF80yZzcVdRia",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "calendar": {
+          "__rl": true,
+          "value": "=pavas.malviya@gmail.com",
+          "mode": "id",
+          "__regex": "(^[a-zA-Z0-9.!#$%&’*+/=?^_`{|}~-]+@[a-zA-Z0-9-]+(?:\\.[a-zA-Z0-9-]+)*)"
+        },
+        "eventId": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Event_ID', ``, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleCalendarTool",
+      "typeVersion": 1.3,
+      "position": [
+        848,
+        80
+      ],
+      "id": "e7451f0b-5c94-4fc1-869d-52370f219d27",
+      "name": "delete_appointments",
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "vlVsF80yZzcVdRia",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1088,
+        -96
+      ],
+      "id": "ad0938b1-bd15-4a47-b265-42ffd266e608",
+      "name": "Send a text message",
+      "webhookId": "f4ae1d02-766e-40e7-953f-7adedcbb25f1",
+      "credentials": {
+        "telegramApi": {
+          "id": "GkL5l6uXMHRTl48z",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -272,
+        -80
+      ],
+      "id": "532652c4-0e00-4a80-a5ea-362c0267779f",
+      "name": "Telegram Trigger",
+      "webhookId": "2abca2dd-6bdd-413b-afcf-45fa1b36b5de",
+      "credentials": {
+        "telegramApi": {
+          "id": "GkL5l6uXMHRTl48z",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -368,
+        192
+      ],
+      "id": "eabf893e-8e13-451a-9dad-cc5cfea73e02",
+      "name": "When Executed by Another Workflow"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "book_appointment": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "get_appointments": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "delete_appointments": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "457d4d05-0a27-4e53-8d0c-577bf8757364",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "761a794c4da9235c62857060be516bfe9d943f5f50584dbb00d0a1d608993847"
+  },
+  "nodeGroups": [],
+  "id": "jwylLIvRCAEziN6d",
+  "tags": []
+}
